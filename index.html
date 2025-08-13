@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Keypad App</title>
+  <style>
+    :root{
+      --cols: 3;                             /* keypad columns */
+      --key: clamp(56px, 18vw, 96px);        /* keypad key size (square) */
+      --gap: clamp(8px, 2.4vw, 12px);        /* space between keys */
+      --padW: calc(var(--cols) * var(--key) + (var(--cols) - 1) * var(--gap));
+    }
+
+    /* Base layout */
+    body { background:#fff; color:#000; font-family: Arial, Helvetica, sans-serif; margin:0; min-height:100vh; display:flex; align-items:center; justify-content:center; }
+    .app { width:min(92vw, 540px); background:#fff; border:2px solid #000; border-radius:8px; padding:20px; text-align:center; position:relative; }
+    .title { font-size: clamp(18px, 4vw, 22px); margin-bottom:10px; }
+
+    /* Config bar */
+    .config { width: min(100%, var(--padW)); margin:0 auto 12px; display:grid; grid-template-columns: 1fr auto; gap:8px; border:1px solid #000; border-radius:4px; padding:8px; box-sizing:border-box; }
+    .config input { border:1px solid #000; border-radius:4px; padding:8px; font-size: clamp(14px, 3.2vw, 16px); width:100%; box-sizing:border-box; transition:filter .2s ease; }
+    .config input.blurred { filter: blur(6px); }
+    .config button { border:1px solid #000; border-radius:4px; padding:8px 10px; background:#fff; cursor:pointer; font-weight:600; font-size: clamp(13px, 3vw, 16px); }
+    .saveMsg { font-size: clamp(11px, 2.6vw, 13px); margin-top:6px; min-height:14px; }
+
+    /* Pad area wrapper to keep widths identical */
+    .padWrap { width: min(100%, var(--padW)); margin:0 auto; position:relative; }
+
+    /* Display input aligned to keypad width */
+    .display { position:relative; width:100%; border:1px solid #000; border-radius:4px; padding: clamp(8px, 2vw, 14px); box-sizing:border-box; margin:0 auto 15px; }
+    .display input { width:100%; border:none; outline:none; font-size: clamp(18px, 5vw, 28px); text-align:center; padding:0; box-sizing:border-box; }
+    /* Right-aligned counter overlay */
+    .hint { position:absolute; right: clamp(6px, 1.5vw, 10px); top:50%; transform:translateY(-50%); font-size: clamp(11px, 2.8vw, 13px); background:#fff; padding:0 2px; line-height:1; pointer-events:none; }
+
+    /* Keypad grid (7-8-9 top row) */
+    .grid { display:grid; grid-template-columns: repeat(3, var(--key)); gap: var(--gap); justify-content:center; }
+    .key { width: var(--key); height: var(--key); border:1px solid #000; background:#fff; border-radius:6px; font-size: clamp(16px, 5vw, 22px); cursor:pointer; display:flex; align-items:center; justify-content:center; }
+    .key.clear { background:#d00; color:#fff; }
+    .key.enter { background:#0a0; color:#fff; }
+
+    /* Lock overlay for padWrap only */
+    .lock { position:absolute; inset:0; display:none; align-items:center; justify-content:center; background:rgba(255,255,255,0.9); z-index:5; text-align:center; padding:20px; box-sizing:border-box; }
+    .lock.active { display:flex; }
+    .lock .msg { font-size: clamp(16px, 4vw, 18px); font-weight:bold; }
+
+    /* Modal */
+    .modal { position:fixed; inset:0; display:none; align-items:center; justify-content:center; background:rgba(0,0,0,0.4); padding: 10px; }
+    .modal.active { display:flex; }
+    .modal-card { width: min(92vw, 360px); background:#fff; border:2px solid #000; border-radius:8px; padding:20px; text-align:center; }
+    .emoji { font-size: clamp(36px, 10vw, 48px); margin-bottom:10px; }
+    .msg { font-size: clamp(16px, 5vw, 20px); margin-bottom:6px; }
+    .modal-desc { font-size: clamp(12px, 3.6vw, 14px); margin-top:4px; }
+
+    /* Make focus outlines visible for accessibility */
+    .key:focus, .config input:focus, .config button:focus, #closeBtn:focus { outline: 2px solid #000; outline-offset: 2px; }
+  </style>
+</head>
+<body>
+  <div class="app" role="application" aria-label="Keypad app">
+    <div class="title">Lunch Key Pad Number</div>
+
+    <!-- Set Code bar -->
+    <div class="config" aria-label="Set code">
+      <input id="setCode" inputmode="numeric" placeholder="Set new code (digits only)" aria-label="Set new code" />
+      <button id="applyCode" aria-label="Save or toggle code">Set Code</button>
+      <div id="saveMsg" class="saveMsg" aria-live="polite"></div>
+    </div>
+
+    <div class="padWrap">
+      <div class="display">
+        <input id="pin" inputmode="numeric" autocomplete="off" autocorrect="off" spellcheck="false" aria-label="Code input" />
+        <span id="hint" class="hint">set code</span>
+      </div>
+
+      <div class="grid" aria-label="Keypad">
+        <!-- Row 1 -->
+        <button class="key" data-key="7">7</button>
+        <button class="key" data-key="8">8</button>
+        <button class="key" data-key="9">9</button>
+        <!-- Row 2 -->
+        <button class="key" data-key="4">4</button>
+        <button class="key" data-key="5">5</button>
+        <button class="key" data-key="6">6</button>
+        <!-- Row 3 -->
+        <button class="key" data-key="1">1</button>
+        <button class="key" data-key="2">2</button>
+        <button class="key" data-key="3">3</button>
+        <!-- Row 4 -->
+        <button class="key clear" data-action="clear">Clear</button>
+        <button class="key" data-key="0">0</button>
+        <button class="key enter" data-action="enter">Enter</button>
+      </div>
+
+      <!-- Overlay starts active by default; JS will hide it if a saved code exists -->
+      <div id="lock" class="lock active" aria-hidden="true">
+        <div class="msg">Please set a code first</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal -->
+  <div id="modal" class="modal" role="dialog" aria-modal="true" aria-labelledby="modalTitle" aria-describedby="modalDesc">
+    <div class="modal-card">
+      <div id="modalEmoji" class="emoji" aria-hidden="true"></div>
+      <div id="modalTitle" class="msg"></div>
+      <div id="modalDesc" class="modal-desc"></div>
+    </div>
+  </div>
+
+  <script>
+    (function(){
+      // Cookie helpers
+      function setCookie(name, value, days){
+        const d = new Date();
+        d.setTime(d.getTime() + days*24*60*60*1000);
+        document.cookie = name + '=' + encodeURIComponent(value) + ';expires=' + d.toUTCString() + ';path=/';
+      }
+      function getCookie(name){
+        const m = document.cookie.match(new RegExp('(?:^|; )' + name.replace(/([.$?*|{}()\[\]\\/+^])/g, '\\$1') + '=([^;]*)'));
+        return m ? decodeURIComponent(m[1]) : null;
+      }
+      function clearCookie(name){ document.cookie = name + '=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/'; }
+
+      const CODE_COOKIE = 'keypad_code';
+      let correct = null; // becomes a string of digits when set
+
+      // Elements
+      const pin = document.getElementById('pin');
+      const hint = document.getElementById('hint');
+      const modal = document.getElementById('modal');
+      const modalEmoji = document.getElementById('modalEmoji');
+      const modalTitle = document.getElementById('modalTitle');
+      const modalDesc = document.getElementById('modalDesc');
+      const setCodeInput = document.getElementById('setCode');
+      const applyBtn = document.getElementById('applyCode');
+      const saveMsg = document.getElementById('saveMsg');
+      const lock = document.getElementById('lock');
+
+      function setLocked(on){ lock.classList.toggle('active', !!on); }
+
+      let targetLen = 0;
+      function syncTargetLen(){
+        targetLen = correct ? correct.length : 0;
+        pin.maxLength = Math.max(targetLen, 1);
+        hint.textContent = correct ? (pin.value.length + '/' + targetLen) : 'set code';
+        setLocked(!correct);
+      }
+
+      function openModal(ok){
+        if(ok){ modalEmoji.textContent = '😀'; modalTitle.textContent = 'Success'; modalDesc.textContent = 'Correct code'; }
+        else { modalEmoji.textContent = '❌'; modalTitle.textContent = 'Incorrect'; modalDesc.textContent = 'Try again'; }
+        modal.classList.add('active');
+        setTimeout(() => modal.classList.remove('active'), 1000);
+      }
+
+      function appendDigit(d){ if(!correct) return; if(pin.value.length >= targetLen) return; pin.value += d; hint.textContent = pin.value.length + '/' + targetLen; }
+      function clearAll(){ if(!correct) return; pin.value=''; hint.textContent = '0/' + targetLen; }
+      function submit(){ if(!correct) return; openModal(pin.value === correct); }
+
+      // Modes for the button: set | hide | reset
+      let mode = 'set';
+      function setMode(next){
+        mode = next;
+        if(mode === 'set'){ applyBtn.textContent = 'Set Code'; setCodeInput.classList.remove('blurred'); setCodeInput.readOnly = false; }
+        else if(mode === 'hide'){ applyBtn.textContent = 'Hide Code'; setCodeInput.classList.remove('blurred'); setCodeInput.readOnly = true; }
+        else if(mode === 'reset'){ applyBtn.textContent = 'Reset Code'; setCodeInput.readOnly = true; }
+      }
+
+      function handleSet(){
+        const newCode = (setCodeInput.value || '').trim();
+        if(!/^\d+$/.test(newCode)){ saveMsg.textContent = 'Please enter digits only'; return; }
+        correct = newCode;
+        setCookie(CODE_COOKIE, correct, 365);
+        pin.value='';
+        saveMsg.textContent = 'Code saved'; setTimeout(()=> saveMsg.textContent='', 1500);
+        syncTargetLen();
+        setMode('hide');
+      }
+      function handleHide(){ setCodeInput.classList.add('blurred'); setMode('reset'); }
+      function handleReset(){ clearCookie(CODE_COOKIE); correct = null; setCodeInput.classList.remove('blurred'); setCodeInput.readOnly = false; setCodeInput.value=''; pin.value=''; syncTargetLen(); setMode('set'); setCodeInput.focus(); }
+
+      applyBtn.addEventListener('click', () => { if(mode==='set') handleSet(); else if(mode==='hide') handleHide(); else handleReset(); });
+
+      document.querySelectorAll('button.key').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const d = btn.getAttribute('data-key');
+          const action = btn.getAttribute('data-action');
+          if(d) appendDigit(d); else if(action==='clear') clearAll(); else if(action==='enter') submit();
+        });
+      });
+
+      window.addEventListener('keydown', e => {
+        if(e.key>='0' && e.key<='9') appendDigit(e.key);
+        if(e.key==='Enter') submit();
+        if(e.key==='Backspace'){ if(!correct) return; pin.value = pin.value.slice(0,-1); hint.textContent = pin.value.length + '/' + targetLen; }
+        if(e.key.toLowerCase()==='c') clearAll();
+      });
+
+      // Initialize from cookie
+      const saved = getCookie(CODE_COOKIE);
+      if(saved && /^\d+$/.test(saved)) { correct = saved; setCodeInput.value = saved; setMode('hide'); }
+      else { setMode('set'); }
+      syncTargetLen();
+    })();
+  </script>
+</body>
+</html>
